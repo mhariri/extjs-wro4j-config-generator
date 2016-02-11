@@ -10,7 +10,8 @@ verbose = False
 def main(argv):
     parser = argparse.ArgumentParser(prog=__file__)
     parser.add_argument('--app', help='root file to process (default: ./Application.js)', default="Application.js")
-    parser.add_argument('--map', help='mapping of classes to directories, eg --map IPticket:/x/y/', action='append', default=[])
+    parser.add_argument('--map', help='mapping of classes to directories, eg --map org.example:/x/y/', action='append', default=[])
+    parser.add_argument('--ignore', help='ignore specific classes/packages, eg --ignore org.example.common', action='append', default=[])
     parser.add_argument('--workspace', help='project resources directory (default: ".")', default=".")
     parser.add_argument('--verbose', help='run in verbose mode', action='store_true')
     args = parser.parse_args()
@@ -22,7 +23,8 @@ def main(argv):
     path_map = {"Ext": None,
                 "Common": None,
                 "Deft": None}
-    path_map.update(dict([tuple(i.split(":")) for i in args.map]))
+    path_map.update(dict([tuple(i.rstrip("/").split(":")) for i in args.map]))
+    path_map.update(dict([(i, None) for i in args.ignore]))
 
     if verbose:
         print >> sys.stderr, "Path maps:" + `path_map`
@@ -30,9 +32,9 @@ def main(argv):
 
     ordered_dependencies = resolve_dependencies(args.app, path_map)
 
-    workspace = os.path.expanduser(args.workspace)
+    workspace = os.path.abspath(os.path.expanduser(args.workspace))
 
-    print "\n".join(["<js>" + i[len(workspace):] + "</js>" for i in ordered_dependencies])
+    print "\n".join(["<js>" + os.path.abspath(i)[len(workspace)+1:] + "</js>" for i in ordered_dependencies])
 
 def resolve_dependencies(file, path_map, resolved=[], unresolved=[]):
     if file not in resolved:
@@ -63,21 +65,26 @@ def find_dependencies(file):
         print  >> sys.stderr, "Dependencies of %s are %s"%(file, deps)
     return deps
 
-def find_json_array(jscontents, key):
+def find_json_array(jscontents, key, mapper=lambda x:x):
     match = re.search(r"%s\s*:\s*(\[[^\]]*\])"%key, jscontents)
     if match == None:
         return []
     (requires,) = match.groups()
     #yaml does not process tabs properly
     requires = requires.replace("\t", " ")
-    return yaml.load(requires)
+    return [mapper(i) for i in yaml.load(requires)]
 
 def find_json_value(jscontents, key):
     match = re.search(r"%s\s*:\s*([^,\}]*)"%key, jscontents)
     if match == None:
         return []
-    (requires,) = match.groups()
-    return [yaml.load(requires)]
+    (deps,) = match.groups()
+    if key=="controller" and "#Router" in deps:
+        if verbose:
+            print  >> sys.stderr, "Cannot process #Router in controller, ignoring"
+        return []
+
+    return [yaml.load(deps)]
 
 
 def convert_class_to_path(cls, path_map):
