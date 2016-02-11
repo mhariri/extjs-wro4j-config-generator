@@ -11,7 +11,7 @@ In ExtJS, the dependencies of a class are defined in the following form:
         }
     });
 
-And wro4j, in order to create a bungle of javascript files,
+And wro4j, in order to create a bundle of javascript files,
 needs to know the order of putting the files in the bundle,
 which is provided in its configuration file, ie wro.xml
 
